@@ -1,6 +1,7 @@
 import { Box, Button, Container, TextField, Typography, Alert } from '@mui/material';
 import React, { useState } from 'react';
 import { useTheme } from '@mui/material/styles';
+import { registerUser } from '../services/api';
 
 const Signup = ({ onSignup, onBackToLogin }) => {
   const theme = useTheme();
@@ -51,13 +52,21 @@ const Signup = ({ onSignup, onBackToLogin }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     setSubmitError('');
 
     if (validateForm()) {
-      // TODO: Add actual registration logic here
-      onSignup(formData);
+      try {
+        await registerUser({
+          username: formData.username,
+          password: formData.password
+        });
+        // Return to login page after successful registration
+        onBackToLogin();
+      } catch (error) {
+        setSubmitError(error.message);
+      }
     }
   };
 

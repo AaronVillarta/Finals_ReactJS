@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { Container, Button, Typography } from '@mui/material';
-import GameBoard from './components/GameBoard';
-import GameRules from './components/GameRules';
+import { Container, Typography } from '@mui/material';
 import Login from './pages/Login';
+import Game from './components/Game';
 
 function App() {
-  const [showRules, setShowRules] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [username, setUsername] = useState('');
 
   if (!isLoggedIn) {
-    return <Login onLogin={() => setIsLoggedIn(true)} />;
+    return <Login onLogin={(user) => {
+      setIsLoggedIn(true);
+      setUsername(user.username);
+    }} />;
   }
 
   return (
@@ -17,16 +19,7 @@ function App() {
       <Typography variant="h3" gutterBottom>
         Super RPS
       </Typography>
-      <Button 
-        variant="contained" 
-        color="primary" 
-        onClick={() => setShowRules(!showRules)}
-        sx={{ mb: 2 }}
-      >
-        {showRules ? 'Hide Rules' : 'Show Rules'}
-      </Button>
-      {showRules && <GameRules />}
-      <GameBoard />
+      <Game username={username} />
     </Container>
   );
 }

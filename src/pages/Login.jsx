@@ -3,15 +3,17 @@ import React, { useState } from 'react';
 import { useTheme } from '@mui/material/styles';
 import Signup from './Signup';
 
+const API_URL = 'http://localhost:5001';
+
 const Login = ({ onLogin }) => {
   const theme = useTheme();
+  const [showSignup, setShowSignup] = useState(false);
   const [formData, setFormData] = useState({
     username: '',
     password: ''
   });
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
-  const [isSignup, setIsSignup] = useState(false);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -19,7 +21,6 @@ const Login = ({ onLogin }) => {
       ...prev,
       [name]: value
     }));
-    // Clear errors when user starts typing
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -33,47 +34,57 @@ const Login = ({ onLogin }) => {
     
     if (!formData.username.trim()) {
       newErrors.username = 'Username is required';
-    } else if (formData.username.length < 3) {
-      newErrors.username = 'Username must be at least 3 characters';
     }
-
     if (!formData.password) {
       newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     setSubmitError('');
 
     if (validateForm()) {
-      // TODO: Add actual authentication logic here
-      // For demo purposes, let's check for a dummy username/password
-      if (formData.username === 'admin' && formData.password === 'password123') {
-        onLogin();
-      } else {
-        setSubmitError('Invalid username or password');
+      try {
+        console.log('Attempting login with:', formData);
+        
+        const response = await fetch(`${API_URL}/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(formData)
+        });
+
+        console.log('Response status:', response.status);
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Login failed');
+        }
+
+        console.log('Login successful:', data);
+        onLogin(data.user);
+      } catch (error) {
+        console.error('Login error:', error);
+        setSubmitError(error.message || 'Failed to connect to server');
       }
     }
   };
 
-  if (isSignup) {
-    return <Signup 
-      onSignup={(userData) => {
-        // TODO: Add actual registration logic here
-        console.log('Register user:', userData);
-        setIsSignup(false);
-      }}
-      onBackToLogin={() => setIsSignup(false)}
-    />;
-  }
+  const handleBackToLogin = () => {
+    setShowSignup(false);
+    setErrors({});
+  };
 
-  return (
+  return showSignup ? (
+    <Signup onSignup={onLogin} onBackToLogin={handleBackToLogin} />
+  ) : (
     <Container component="main" maxWidth="xs">
       <Box
         sx={{
@@ -138,7 +149,7 @@ const Login = ({ onLogin }) => {
           
           <Button
             fullWidth
-            onClick={() => setIsSignup(true)}
+            onClick={() => setShowSignup(true)}
             sx={{ mt: 1 }}
           >
             Create New Account
