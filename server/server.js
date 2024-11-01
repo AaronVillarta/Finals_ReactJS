@@ -136,11 +136,14 @@ io.on('connection', (socket) => {
                 isSuperWeakness: result.isSuperWeakness
             });
 
+            // Reset choices immediately after sending results
+            player1.choice = null;
+            player2.choice = null;
+            
+            // Notify clients to reset their choice state
             setTimeout(() => {
-                player1.choice = null;
-                player2.choice = null;
                 io.to(socket.gameId).emit('resetRound');
-            }, 180000);
+            }, 3000); // Short delay before allowing new choices
         }
     });
     

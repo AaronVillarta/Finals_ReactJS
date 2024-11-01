@@ -283,7 +283,7 @@ function GameBoard({ username }) {
               disabled={Boolean(
                 playerLives <= 0 || 
                 computerLives <= 0 || 
-                (gameState === 'playing' && playerChoice) ||
+                playerChoice ||
                 showConfirmation
               )}
               sx={{ minWidth: 100 }}
