@@ -1,10 +1,10 @@
-export const ELEMENTS = [
+const ELEMENTS = [
   'Rock', 'Paper', 'Scissors', 'Fire', 'Water', 
   'Air', 'Dragon', 'Devil', 'Lightning', 'Gun', 
   'Snake', 'Human', 'Tree', 'Wolf', 'Sponge'
 ];
 
-export const WINNING_COMBINATIONS = {
+const WINNING_COMBINATIONS = {
   Rock: ['Fire', 'Scissors', 'Snake', 'Human', 'Wolf', 'Sponge', 'Tree'],
   Paper: ['Air', 'Rock', 'Water', 'Devil', 'Dragon', 'Gun', 'Lightning'],
   Scissors: ['Air', 'Tree', 'Paper', 'Snake', 'Human', 'Wolf', 'Sponge'],
@@ -22,7 +22,7 @@ export const WINNING_COMBINATIONS = {
   Sponge: ['Paper', 'Air', 'Water', 'Devil', 'Dragon', 'Gun', 'Lightning']
 };
 
-export const SUPER_WEAKNESSES = {
+const SUPER_WEAKNESSES = {
   Rock: 'Paper',
   Paper: 'Scissors',
   Scissors: 'Rock',
@@ -39,3 +39,6 @@ export const SUPER_WEAKNESSES = {
   Wolf: 'Dragon',
   Sponge: 'Air'
 }; 
+
+
+module.exports = { ELEMENTS, WINNING_COMBINATIONS, SUPER_WEAKNESSES };

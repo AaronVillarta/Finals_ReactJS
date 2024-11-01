@@ -21,46 +21,35 @@ function GameBoard({ username }) {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [pendingChoice, setPendingChoice] = useState(null);
 
+  const [gameResult, setGameResult] = useState(null);
+
+  const [game, setGame] = useState({ players: [] });
+
   useEffect(() => {
     const newSocket = io('http://localhost:5001');
 
     const handleRoundResultInEffect = (roundData) => {
-      const opponent = roundData.players.find(p => p.id !== newSocket.id);
-      if (opponent) {
-        setPlayerChoice(roundData.choices[newSocket.id]);
-        setComputerChoice(roundData.choices[opponent.id]);
+      if (socket) {
+        const isPlayer1 = players[0]?.id === socket.id;
+        setPlayerChoice(isPlayer1 ? roundData.player1Choice : roundData.player2Choice);
+        setComputerChoice(isPlayer1 ? roundData.player2Choice : roundData.player1Choice);
         
-        if (roundData.lives) {
-          setPlayerLives(roundData.lives[newSocket.id]);
-          setComputerLives(roundData.lives[opponent.id]);
-        }
-
-        switch(roundData.result) {
-          case 'win':
-            setResult('You win! +1 life');
-            break;
-          case 'superwin':
-            setResult('Super win! +1 life, opponent -2 lives');
-            break;
-          case 'loss':
-            setResult('You lose! -1 life');
-            break;
-          case 'superloss':
-            setResult('Super loss! -2 lives');
-            break;
-          case 'draw':
-            setResult("It's a draw!");
-            break;
-          default:
-            setResult('Unknown result');
-            break;
+        const isWinner = (isPlayer1 && roundData.winner === 'player1') || 
+                        (!isPlayer1 && roundData.winner === 'player2');
+        
+        if (roundData.winner === 'draw') {
+          setResult("It's a draw!");
+        } else if (isWinner) {
+          setResult(roundData.isSuperWeakness ? 'Super win! +1 life, opponent -2 lives' : 'You win! +1 life');
+        } else {
+          setResult(roundData.isSuperWeakness ? 'Super loss! -2 lives' : 'You lose! -1 life');
         }
 
         setTimeout(() => {
           setPlayerChoice(null);
           setComputerChoice(null);
           setResult('');
-        }, 2000);
+        }, 180000);
       }
     };
 
@@ -103,7 +92,16 @@ function GameBoard({ username }) {
       }
     });
 
-    newSocket.on('roundResult', handleRoundResultInEffect);
+    newSocket.on('roundResult', (roundData) => {
+      handleRoundResultInEffect(roundData);
+      setGameResult(roundData);
+    });
+
+    newSocket.on('resetRound', () => {
+      setPlayerChoice(null);
+      setComputerChoice(null);
+      setResult('');
+    });
 
     newSocket.on('playerLeft', () => {
       setGameState('waiting');
@@ -298,12 +296,7 @@ function GameBoard({ username }) {
 
       {playerChoice && (computerChoice || gameState === 'playing') && (
         <Box sx={{ mt: 3 }}>
-          <Typography>Your choice: {playerChoice}</Typography>
-          {computerChoice && (
-            <Typography>
-              {players.length > 1 ? "Opponent's" : "Computer's"} choice: {computerChoice}
-            </Typography>
-          )}
+          
           <Typography variant="h6" sx={{ mt: 1 }}>{result}</Typography>
         </Box>
       )}
@@ -327,6 +320,19 @@ function GameBoard({ username }) {
       >
         {players.length > 1 ? 'Play Again' : 'Restart'}
       </Button>
+
+      {gameResult && (
+        <div>
+          <p>Player 1 chose: {gameResult.player1Choice}</p>
+          <p>Player 2 chose: {gameResult.player2Choice}</p>
+          <p>
+            {gameResult.winner === 'draw' 
+              ? "It's a draw!" 
+              : `${gameResult.winner} wins${gameResult.isSuperWeakness ? ' with super weakness!' : '!'}`
+            }
+          </p>
+        </div>
+      )}
     </Paper>
   );
 }

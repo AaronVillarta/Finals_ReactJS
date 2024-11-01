@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
+// Add this at the top of server.js
+const { WINNING_COMBINATIONS, SUPER_WEAKNESSES, ELEMENTS } = require('../src/gameLogic.js');
+
 
 // Express app setup
 const app = express();
@@ -67,12 +70,13 @@ io.on('connection', (socket) => {
         let gameId = findAvailableGame() || createNewGame();
         let game = games.get(gameId);
         
-        // Add player to game
+        // Add player to game with initial lives
         game.players.push({
             id: socket.id,
             username: username,
             ready: false,
-            choice: null
+            choice: null,
+            lives: 3  // Initialize lives
         });
 
         // Join socket room
@@ -96,55 +100,51 @@ io.on('connection', (socket) => {
 
     // Handle player choice
     socket.on('makeChoice', (choice) => {
-        console.log(`Player ${socket.id} chose ${choice}`);
-        
-        for (const [gameId, game] of games.entries()) {
-            const player = game.players.find(p => p.id === socket.id);
-            if (player) {
-                // Update the player's choice
-                player.choice = choice;
-                
-                // Only proceed if there are 2 players
-                if (game.players.length === 2) {
-                    const [player1, player2] = game.players;
-                    
-                    // Debug log to see actual choices
-                    console.log('Current choices:', {
-                        [player1.username]: player1.choice,
-                        [player2.username]: player2.choice
-                    });
+        const game = games.get(socket.gameId);
+        if (!game) return;
 
-                    const allPlayersChosen = game.players.every(p => p.choice);
-                    console.log('All players chosen:', allPlayersChosen);
-                    
-                    if (allPlayersChosen) {
-                        const result = determineWinner(player1.choice, player2.choice);
-                        updateLives(game, result);
+        // Find the current player and set their choice
+        const currentPlayer = game.players.find(p => p.id === socket.id);
+        if (currentPlayer) {
+            currentPlayer.choice = choice;
+        }
 
-                        // Emit the round result immediately when both players have chosen
-                        io.to(gameId).emit('roundResult', {
-                            players: game.players,
-                            choices: {
-                                [player1.id]: player1.choice,
-                                [player2.id]: player2.choice
-                            },
-                            result: result,
-                            lives: {
-                                [player1.id]: player1.lives,
-                                [player2.id]: player2.lives
-                            }
-                        });
+        // Check if both players have made their choices
+        const [player1, player2] = game.players;
+        if (player1.choice && player2.choice) {
+            const result = determineWinner(player1.choice, player2.choice);
+            
+            // Update lives based on the result
+            updateLives(game, {
+                winner: result.winner === 'player1' ? player1.id : player2.id,
+                isSuperWeakness: result.isSuperWeakness
+            });
 
-                        // Reset choices for next round
-                        player1.choice = null;
-                        player2.choice = null;
-                        game.rounds++;
-                    }
+            // Emit the updated game state including new lives
+            io.to(socket.gameId).emit('gameUpdate', {
+                players: game.players,
+                lives: {
+                    [player1.id]: player1.lives,
+                    [player2.id]: player2.lives
                 }
-                break;
-            }
+            });
+            
+            io.to(socket.gameId).emit('roundResult', {
+                player1Choice: player1.choice,
+                player2Choice: player2.choice,
+                winner: result.winner,
+                isSuperWeakness: result.isSuperWeakness
+            });
+
+            setTimeout(() => {
+                player1.choice = null;
+                player2.choice = null;
+                io.to(socket.gameId).emit('resetRound');
+            }, 180000);
         }
     });
+    
+    
 
     // Handle disconnect
     socket.on('disconnect', () => {
@@ -184,28 +184,49 @@ function createNewGame() {
     return gameId;
 }
 
-function determineWinner(choice1, choice2) {
-    if (choice1 === choice2) {
-        return 'draw';
+function determineWinner(player1Choice, player2Choice) {
+    if (player1Choice === player2Choice) {
+        return { winner: 'draw', isSuperWeakness: false };
     }
-    return WINNING_COMBINATIONS[choice1].includes(choice2) ? 'player1' : 'player2';
+    
+    if (SUPER_WEAKNESSES[player1Choice] === player2Choice) {
+        return { winner: 'player2', isSuperWeakness: true };
+    }
+    
+    if (SUPER_WEAKNESSES[player2Choice] === player1Choice) {
+        return { winner: 'player1', isSuperWeakness: true };
+    }
+    
+    if (WINNING_COMBINATIONS[player1Choice].includes(player2Choice)) {
+        return { winner: 'player1', isSuperWeakness: false };
+    }
+    
+    return { winner: 'player2', isSuperWeakness: false };
 }
 
 function updateLives(game, result) {
     const [player1, player2] = game.players;
-    
+    const { winner, isSuperWeakness } = result;
+
     // Initialize lives if they don't exist
     if (player1.lives === undefined) player1.lives = 3;
     if (player2.lives === undefined) player2.lives = 3;
-    
-    // Update lives based on result
-    if (result === player2.id) {
-        player1.lives--;
-    } else if (result === player1.id) {
-        player2.lives--;
+
+    // No life changes on draw
+    if (winner === 'draw') return;
+
+    // Base damage is 1, additional +1 for super weakness
+    const damage = isSuperWeakness ? 2 : 1;
+
+    if (winner === player1.id) {
+        player2.lives -= damage;  // Damage to loser
+        player1.lives = Math.min(player1.lives + 1, 3);  // Add life to winner, cap at 3
+    } else if (winner === player2.id) {
+        player1.lives -= damage;  // Damage to loser
+        player2.lives = Math.min(player2.lives + 1, 3);  // Add life to winner, cap at 3
     }
-    // No lives are deducted on a draw
 }
+
 
 // Start server
 httpServer.listen(PORT, () => {
