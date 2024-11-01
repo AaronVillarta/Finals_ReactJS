@@ -1,10 +1,16 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Container, Button, Typography } from '@mui/material';
 import GameBoard from './components/GameBoard';
 import GameRules from './components/GameRules';
+import Login from './pages/Login';
 
 function App() {
   const [showRules, setShowRules] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  if (!isLoggedIn) {
+    return <Login onLogin={() => setIsLoggedIn(true)} />;
+  }
 
   return (
     <Container maxWidth="md" sx={{ textAlign: 'center', mt: 4 }}>
