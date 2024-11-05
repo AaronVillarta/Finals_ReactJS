@@ -1,69 +1,28 @@
 import { useState, useEffect } from 'react';
-import { Button, Typography, Grid, Paper, Box, CircularProgress } from '@mui/material';
+import { Button, Typography, Grid, Paper, Box, CircularProgress, Alert } from '@mui/material';
 import { io } from 'socket.io-client';
-import { ELEMENTS, WINNING_COMBINATIONS, SUPER_WEAKNESSES } from '../gameLogic';
+import { ELEMENTS } from '../gameLogic';
 
 function GameBoard({ username }) {
-  
   const [socket, setSocket] = useState(null);
-  const [gameState, setGameState] = useState('connecting');
+  const [gameState, setGameState] = useState('waiting');
   const [players, setPlayers] = useState([]);
-  const [playerStatuses, setPlayerStatuses] = useState({});
-
-  
-  const [playerLives, setPlayerLives] = useState(3);
-  const [computerLives, setComputerLives] = useState(3);
   const [playerChoice, setPlayerChoice] = useState(null);
   const [computerChoice, setComputerChoice] = useState(null);
   const [result, setResult] = useState('');
-  const [rounds, setRounds] = useState(0);
-
+  const [playerLives, setPlayerLives] = useState(3);
+  const [computerLives, setComputerLives] = useState(3);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [pendingChoice, setPendingChoice] = useState(null);
+  const [playerHealthChange, setPlayerHealthChange] = useState(null);
+  const [computerHealthChange, setComputerHealthChange] = useState(null);
+  const [announcement, setAnnouncement] = useState('');
+  const [timeLeft, setTimeLeft] = useState(10);
+  const [isPickingPhase, setIsPickingPhase] = useState(false);
 
   useEffect(() => {
     const newSocket = io('http://localhost:5001');
-
-    const handleRoundResultInEffect = (roundData) => {
-      const opponent = roundData.players.find(p => p.id !== newSocket.id);
-      if (opponent) {
-        setPlayerChoice(roundData.choices[newSocket.id]);
-        setComputerChoice(roundData.choices[opponent.id]);
-        
-        if (roundData.lives) {
-          setPlayerLives(roundData.lives[newSocket.id]);
-          setComputerLives(roundData.lives[opponent.id]);
-        }
-
-        switch(roundData.result) {
-          case 'win':
-            setResult('You win! +1 life');
-            break;
-          case 'superwin':
-            setResult('Super win! +1 life, opponent -2 lives');
-            break;
-          case 'loss':
-            setResult('You lose! -1 life');
-            break;
-          case 'superloss':
-            setResult('Super loss! -2 lives');
-            break;
-          case 'draw':
-            setResult("It's a draw!");
-            break;
-          default:
-            setResult('Unknown result');
-            break;
-        }
-
-        setTimeout(() => {
-          setPlayerChoice(null);
-          setComputerChoice(null);
-          setResult('');
-        }, 2000);
-      }
-    };
-
+    
     newSocket.on('connect', () => {
       console.log('Connected to server');
       newSocket.emit('joinGame', username);
@@ -81,29 +40,42 @@ function GameBoard({ username }) {
       setPlayerChoice(null);
       setComputerChoice(null);
       setResult('');
-      setRounds(0);
-      
       setPlayerLives(3);
       setComputerLives(3);
+      setTimeLeft(10);
     });
 
-    newSocket.on('playerStatus', ({ playerId, ready }) => {
-      console.log('Player status update:', playerId, ready);
-      setPlayerStatuses(prev => ({ ...prev, [playerId]: ready }));
-    });
+    newSocket.on('roundResult', (roundData) => {
+      const opponent = roundData.players.find(p => p.id !== newSocket.id);
+      if (opponent) {
+        setPlayerChoice(roundData.choices[newSocket.id]);
+        setComputerChoice(roundData.choices[opponent.id]);
+        
+        if (roundData.lives) {
+          setPlayerLives(roundData.lives[newSocket.id]);
+          setComputerLives(roundData.lives[opponent.id]);
+          
+          const currentPlayer = roundData.players.find(p => p.id === newSocket.id);
+          const opponentPlayer = roundData.players.find(p => p.id !== newSocket.id);
+          setPlayerHealthChange(currentPlayer.lastChange);
+          setComputerHealthChange(opponentPlayer.lastChange);
+        }
 
-    newSocket.on('gameUpdate', ({ players: updatedPlayers, lives }) => {
-      if (updatedPlayers) setPlayers(updatedPlayers);
-      if (lives) {
-        const opponent = updatedPlayers.find(p => p.id !== newSocket.id);
-        if (opponent) {
-          setPlayerLives(lives[newSocket.id]);
-          setComputerLives(lives[opponent.id]);
+        let resultMessage = '';
+        if (roundData.result.superEffective) {
+          resultMessage = `SUPER EFFECTIVE! ${roundData.result.message}`;
+        } else {
+          resultMessage = roundData.result.message;
+        }
+        setResult(resultMessage);
+
+        if (roundData.winCondition) {
+          setAnnouncement(roundData.winCondition);
         }
       }
+      setTimeLeft(10);
+      setPlayerChoice(null);
     });
-
-    newSocket.on('roundResult', handleRoundResultInEffect);
 
     newSocket.on('playerLeft', () => {
       setGameState('waiting');
@@ -111,6 +83,42 @@ function GameBoard({ username }) {
       setPlayerChoice(null);
       setComputerChoice(null);
       setResult('Opponent left the game');
+    });
+
+    newSocket.on('newRound', (data) => {
+      setPlayerChoice(null);
+      setComputerChoice(null);
+      setResult('');
+      setTimeLeft(data.showTimer ? 10 : null);
+      setPlayerHealthChange(null);
+      setComputerHealthChange(null);
+      setAnnouncement(data.message);
+      setIsPickingPhase(data.showTimer);
+    });
+
+    newSocket.on('timerUpdate', (time) => {
+      setTimeLeft(time);
+    });
+
+    newSocket.on('gameReset', () => {
+      setGameState('waiting');
+      setPlayers([]);
+      setPlayerChoice(null);
+      setComputerChoice(null);
+      setResult('');
+      setPlayerLives(3);
+      setComputerLives(3);
+      setShowConfirmation(false);
+      setPendingChoice(null);
+      setPlayerHealthChange(null);
+      setComputerHealthChange(null);
+      setAnnouncement('');
+      setTimeLeft(10);
+    });
+
+    newSocket.on('waitingForRematch', () => {
+      setGameState('waiting');
+      setAnnouncement('Waiting for opponent to choose rematch...');
     });
 
     setSocket(newSocket);
@@ -123,136 +131,92 @@ function GameBoard({ username }) {
   const handleElementChoice = (element) => {
     setPendingChoice(element);
     setShowConfirmation(true);
+    setAnnouncement('');
+    setPlayerHealthChange(null);
+    setComputerHealthChange(null);
   };
 
   const handleConfirmChoice = (confirmed) => {
-    if (confirmed && gameState === 'playing' && socket) {
+    if (confirmed && socket) {
       socket.emit('makeChoice', pendingChoice);
       setPlayerChoice(pendingChoice);
-    } else if (confirmed) {
-      const computerElement = ELEMENTS[Math.floor(Math.random() * ELEMENTS.length)];
-      setPlayerChoice(pendingChoice);
-      setComputerChoice(computerElement);
-      
-      const outcome = determineWinner(pendingChoice, computerElement);
-      updateLives(outcome);
-      handleNextRound();
     }
-    
     setShowConfirmation(false);
     setPendingChoice(null);
   };
 
-  
-  const determineWinner = (player1Choice, player2Choice) => {
-    if (player1Choice === player2Choice) {
-      return 'draw';
-    }
-    
-    if (SUPER_WEAKNESSES[player1Choice] === player2Choice) {
-      return 'player2'; 
-    }
-    
-    if (SUPER_WEAKNESSES[player2Choice] === player1Choice) {
-      return 'player1'; 
-    }
-    
-    if (WINNING_COMBINATIONS[player1Choice].includes(player2Choice)) {
-      return 'player1';
-    }
-    
-    return 'player2';
-  };
-
-  const updateLives = (outcome) => {
-    switch (outcome) {
-      case 'win':
-        setPlayerLives(prev => prev + 1);
-        setComputerLives(prev => prev - 1);
-        setResult('You win! +1 life');
-        break;
-      case 'superwin':
-        setPlayerLives(prev => prev + 1);
-        setComputerLives(prev => prev - 2);
-        setResult('Super win! +1 life, opponent -2 lives');
-        break;
-      case 'loss':
-        setPlayerLives(prev => prev - 1);
-        setComputerLives(prev => prev + 1);
-        setResult('You lose! -1 life');
-        break;
-      case 'superloss':
-        setPlayerLives(prev => prev - 2);
-        setComputerLives(prev => prev + 1);
-        setResult('Super loss! -2 lives');
-        break;
-      default:
-        setResult("It's a draw!");
-    }
-  };
-
-  const handleNextRound = () => {
-    setRounds(prev => prev + 1);
-  };
-
-  const handleRestart = () => {
-    if (gameState === 'playing' && socket) {
-      
-      socket.emit('joinGame', username);
-    } else {
-      
-      setRounds(0);
-      setPlayerLives(3);
-      setComputerLives(3);
-      setPlayerChoice(null);
-      setComputerChoice(null);
-      setResult('');
-    }
-  };
-
-  
-  if (gameState === 'connecting' || gameState === 'waiting') {
+  if (gameState === 'waiting') {
     return (
       <Paper elevation={3} sx={{ p: 3, mt: 3 }}>
         <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
           <CircularProgress />
           <Typography>
-            {gameState === 'connecting' ? 'Connecting to server...' : 'Waiting for opponent...'}
+            {announcement || 'Waiting for opponent...'}
           </Typography>
-          {gameState === 'waiting' && (
-            <Button 
-              variant="contained"
-              onClick={() => setGameState('playing')}
-            >
-              Play Single Player
-            </Button>
-          )}
-          {gameState === 'waiting' && players.map(player => (
-            <Typography key={player.id}>
-              {player.username}: {playerStatuses[player.id] ? 'Ready' : 'Not Ready'}
-            </Typography>
-          ))}
         </Box>
       </Paper>
     );
   }
 
-  
   return (
     <Paper elevation={3} sx={{ p: 3, mt: 3 }}>
-      <Typography variant="h5" gutterBottom>Lives</Typography>
-      <Box sx={{ display: 'flex', justifyContent: 'space-around', mb: 2 }}>
-        <Typography>Your Lives: {playerLives}</Typography>
+      {announcement && (
+        <Alert 
+          severity={
+            announcement.includes('SUPER EFFECTIVE') ? 'warning' :
+            announcement.includes('wins the game') ? 'success' : 'info'
+          }
+          sx={{ mb: 2 }}
+        >
+          <Typography variant="h6" component="div">
+            {announcement}
+          </Typography>
+        </Alert>
+      )}
+
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+        <Typography>
+          Your Lives: {playerLives}
+          {playerHealthChange && (
+            <span style={{ 
+              color: playerHealthChange > 0 ? 'green' : 'red',
+              marginLeft: '8px'
+            }}>
+              {playerHealthChange > 0 ? '+' : ''}{playerHealthChange}
+            </span>
+          )}
+        </Typography>
         <Typography>
           {players.length > 1 ? `${players.find(p => p.id !== socket?.id)?.username}'s Lives` : 'Computer Lives'}: {computerLives}
+          {computerHealthChange && (
+            <span style={{ 
+              color: computerHealthChange > 0 ? 'green' : 'red',
+              marginLeft: '8px'
+            }}>
+              {computerHealthChange > 0 ? '+' : ''}{computerHealthChange}
+            </span>
+          )}
         </Typography>
       </Box>
 
-      <Typography variant="h5" sx={{ mb: 2 }}>
-        Round: {rounds}
-      </Typography>
+      {result && (
+        <Alert 
+          severity={result.includes('win') ? 'success' : result.includes('draw') ? 'info' : 'error'}
+          sx={{ mb: 2 }}
+        >
+          {result}
+        </Alert>
+      )}
 
-      {showConfirmation && (
+      {gameState === 'playing' && timeLeft !== null && (
+        <Box sx={{ textAlign: 'center', mb: 2 }}>
+          <Typography variant="h6" color={timeLeft <= 3 ? 'error' : 'inherit'}>
+            Time remaining: {timeLeft}s
+          </Typography>
+        </Box>
+      )}
+
+      {showConfirmation ? (
         <Box sx={{ mb: 3, textAlign: 'center' }}>
           <Typography variant="h6">
             Are you sure you want to choose {pendingChoice}?
@@ -274,59 +238,70 @@ function GameBoard({ username }) {
             </Button>
           </Box>
         </Box>
+      ) : (
+        <Grid container spacing={2} justifyContent="center">
+          {ELEMENTS.map((element) => (
+            <Grid item key={element}>
+              <Button 
+                variant={playerChoice === element ? "contained" : "outlined"}
+                onClick={() => handleElementChoice(element)}
+                disabled={
+                  Boolean(playerChoice) || 
+                  playerLives <= 0 || 
+                  computerLives <= 0 || 
+                  !isPickingPhase
+                }
+                sx={{ minWidth: 100 }}
+              >
+                {element}
+              </Button>
+            </Grid>
+          ))}
+        </Grid>
       )}
 
-      <Grid container spacing={2} justifyContent="center">
-        {ELEMENTS.map((element) => (
-          <Grid item key={element}>
-            <Button 
-              variant={playerChoice === element ? "contained" : "outlined"}
-              onClick={() => handleElementChoice(element)}
-              disabled={Boolean(
-                playerLives <= 0 || 
-                computerLives <= 0 || 
-                (gameState === 'playing' && playerChoice) ||
-                showConfirmation
-              )}
-              sx={{ minWidth: 100 }}
-            >
-              {element}
-            </Button>
-          </Grid>
-        ))}
-      </Grid>
-
-      {playerChoice && (computerChoice || gameState === 'playing') && (
-        <Box sx={{ mt: 3 }}>
+      {playerChoice && computerChoice && (
+        <Box sx={{ mt: 3, textAlign: 'center' }}>
           <Typography>Your choice: {playerChoice}</Typography>
-          {computerChoice && (
-            <Typography>
-              {players.length > 1 ? "Opponent's" : "Computer's"} choice: {computerChoice}
-            </Typography>
-          )}
-          <Typography variant="h6" sx={{ mt: 1 }}>{result}</Typography>
-        </Box>
-      )}
-
-      {(playerLives <= 0 || computerLives <= 0) && (
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="h4">Game Over!</Typography>
           <Typography>
-            {playerLives <= 0 ? 
-              (players.length > 1 ? `${players.find(p => p.id !== socket?.id)?.username} Wins!` : 'Computer Wins!') : 
-              'You Win!'}
+            {players.length > 1 ? "Opponent's" : "Computer's"} choice: {computerChoice}
           </Typography>
         </Box>
       )}
 
-      <Button 
-        variant="contained" 
-        color="secondary" 
-        onClick={handleRestart}
-        sx={{ mt: 2 }}
-      >
-        {players.length > 1 ? 'Play Again' : 'Restart'}
-      </Button>
+      {(playerLives <= 0 || computerLives <= 0) && (
+        <Box sx={{ mt: 3, textAlign: 'center' }}>
+          <Typography variant="h4">
+            {playerLives <= 0 ? 'You Lost!' : 'You Won!'}
+          </Typography>
+          <Button 
+            variant="contained" 
+            color="primary" 
+            onClick={() => {
+              if (socket) {
+                setGameState('waiting');
+                setPlayers([]);
+                setPlayerChoice(null);
+                setComputerChoice(null);
+                setResult('');
+                setPlayerLives(3);
+                setComputerLives(3);
+                setShowConfirmation(false);
+                setPendingChoice(null);
+                setPlayerHealthChange(null);
+                setComputerHealthChange(null);
+                setAnnouncement('');
+                setTimeLeft(10);
+                
+                socket.emit('resetGame', username);
+              }
+            }}
+            sx={{ mt: 2 }}
+          >
+            Play Again
+          </Button>
+        </Box>
+      )}
     </Paper>
   );
 }

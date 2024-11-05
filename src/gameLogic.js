@@ -1,10 +1,10 @@
-export const ELEMENTS = [
+const ELEMENTS = [
   'Rock', 'Paper', 'Scissors', 'Fire', 'Water', 
   'Air', 'Dragon', 'Devil', 'Lightning', 'Gun', 
   'Snake', 'Human', 'Tree', 'Wolf', 'Sponge'
 ];
 
-export const WINNING_COMBINATIONS = {
+const WINNING_COMBINATIONS = {
   Rock: ['Fire', 'Scissors', 'Snake', 'Human', 'Wolf', 'Sponge', 'Tree'],
   Paper: ['Air', 'Rock', 'Water', 'Devil', 'Dragon', 'Gun', 'Lightning'],
   Scissors: ['Air', 'Tree', 'Paper', 'Snake', 'Human', 'Wolf', 'Sponge'],
@@ -22,7 +22,7 @@ export const WINNING_COMBINATIONS = {
   Sponge: ['Paper', 'Air', 'Water', 'Devil', 'Dragon', 'Gun', 'Lightning']
 };
 
-export const SUPER_WEAKNESSES = {
+const SUPER_WEAKNESSES = {
   Rock: 'Paper',
   Paper: 'Scissors',
   Scissors: 'Rock',
@@ -38,4 +38,54 @@ export const SUPER_WEAKNESSES = {
   Tree: 'Fire',
   Wolf: 'Dragon',
   Sponge: 'Air'
+};
+
+function determineWinner(player1Choice, player2Choice) {
+  
+  if (player1Choice === player2Choice) {
+    return { 
+      result: 'draw',
+      message: "It's a draw!" 
+    };
+  }
+
+  
+  if (SUPER_WEAKNESSES[player1Choice] === player2Choice) {
+    return {
+      result: 'player2',
+      message: `${player2Choice} is super effective against ${player1Choice}!`,
+      superEffective: true
+    };
+  }
+
+  
+  if (SUPER_WEAKNESSES[player2Choice] === player1Choice) {
+    return {
+      result: 'player1',
+      message: `${player1Choice} is super effective against ${player2Choice}!`,
+      superEffective: true
+    };
+  }
+
+  
+  if (WINNING_COMBINATIONS[player1Choice].includes(player2Choice)) {
+    return {
+      result: 'player1',
+      message: `${player1Choice} defeats ${player2Choice}!`,
+      superEffective: false
+    };
+  }
+
+  return {
+    result: 'player2',
+    message: `${player2Choice} defeats ${player1Choice}!`,
+    superEffective: false
+  };
+}
+
+module.exports = {
+  ELEMENTS,
+  WINNING_COMBINATIONS,
+  SUPER_WEAKNESSES,
+  determineWinner
 }; 

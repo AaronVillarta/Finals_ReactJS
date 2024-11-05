@@ -62,7 +62,7 @@ const Signup = ({ onSignup, onBackToLogin }) => {
           username: formData.username,
           password: formData.password
         });
-        // Return to login page after successful registration
+        
         onBackToLogin();
       } catch (error) {
         setSubmitError(error.message);

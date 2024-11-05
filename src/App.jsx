@@ -1,26 +1,22 @@
-import React, { useState } from 'react';
-import { Container, Typography } from '@mui/material';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { useState } from 'react';
 import Login from './pages/Login';
 import Game from './components/Game';
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
 
-  if (!isLoggedIn) {
-    return <Login onLogin={(user) => {
-      setIsLoggedIn(true);
-      setUsername(user.username);
-    }} />;
-  }
+  const handleLogin = (userData) => {
+    setUsername(userData.username);
+  };
 
   return (
-    <Container maxWidth="md" sx={{ textAlign: 'center', mt: 4 }}>
-      <Typography variant="h3" gutterBottom>
-        Super RPS
-      </Typography>
-      <Game username={username} />
-    </Container>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Login onLogin={handleLogin} />} />
+        <Route path="/game" element={<Game username={username} />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
