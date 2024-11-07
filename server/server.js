@@ -1,65 +1,198 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const { determineWinner } = require('../src/gameLogic.js');
-
+const path = require('path');
+const fs = require('fs');
+const sqlite3 = require('sqlite3');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const httpServer = createServer(app);
 
-
+// CORS configuration
 app.use(cors({
-  origin: ["http://localhost:3000", "http://localhost:3001"],
-  methods: ["GET", "POST"]
+    origin: ["http://localhost:3000", "http://localhost:3001"],
+    methods: ["GET", "POST"],
+    credentials: true
 }));
+
+// Important: This needs to be before any routes
 app.use(express.json());
 
-
 const io = new Server(httpServer, {
-  cors: {
-    origin: ["http://localhost:3000", "http://localhost:3001"],
-    methods: ["GET", "POST"]
-  }
+    cors: {
+        origin: ["http://localhost:3000", "http://localhost:3001"],
+        methods: ["GET", "POST"],
+        credentials: true
+    }
 });
 
-const PORT = 5001;
+const JWT_SECRET = process.env.JWT_SECRET;
+const PORT = process.env.PORT || 5001;
 
-
+// In-memory storage
 const games = new Map();
-
-
+const users = new Map();
 const playAgainPlayers = new Set();
 
+// Update the database path to be relative to the server directory
+const dbPath = path.join(__dirname, 'database', 'game.db');
 
-app.get('/', (req, res) => {
-    res.json({ message: 'Welcome to the Rock Paper Scissors API' });
+// Create database directory if it doesn't exist
+if (!fs.existsSync(path.join(__dirname, 'database'))) {
+    fs.mkdirSync(path.join(__dirname, 'database'));
+}
+
+// Update database connection
+const db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+        console.error('Error opening database:', err);
+    } else {
+        console.log('Connected to SQLite database');
+        console.log('Database location:', dbPath);
+        createTables();
+    }
 });
 
+// Update createTables function to log when tables are created
+function createTables() {
+    db.run(`
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `, (err) => {
+        if (err) {
+            console.error('Error creating tables:', err);
+        } else {
+            console.log('Database tables created/verified successfully');
+        }
+    });
+}
+
+// API Routes
 app.get('/test', (req, res) => {
     res.json({ message: 'Server is running!' });
 });
 
-app.post('/login', (req, res) => {
-    console.log('Login attempt received:', req.body);
-    
-    const { username } = req.body;
-
-    if (!username) {
-        return res.status(400).json({ 
-            error: 'Username is required' 
-        });
-    }
-    
-    return res.status(200).json({
-        success: true,
-        user: {
-            id: Date.now(),
-            username: username
+app.get('/test/users', (req, res) => {
+    db.all('SELECT id, username, created_at FROM users', [], (err, rows) => {
+        if (err) {
+            console.error('Error fetching users:', err);
+            return res.status(500).json({ error: 'Database error' });
         }
+        res.json({ users: rows });
     });
 });
 
+// Registration endpoint
+app.post('/register', async (req, res) => {
+    const { username, password } = req.body;
+
+    try {
+        if (!username || !password) {
+            return res.status(400).json({ error: 'Username and password are required' });
+        }
+
+        // Check for existing user
+        db.get('SELECT id FROM users WHERE username = ?', [username], async (err, row) => {
+            if (err) {
+                console.error('Database error during registration:', err);
+                return res.status(500).json({ error: 'Database error' });
+            }
+            
+            if (row) {
+                return res.status(400).json({ error: 'Username already exists' });
+            }
+
+            try {
+                const hashedPassword = await bcrypt.hash(password, 10);
+                
+                db.run(
+                    'INSERT INTO users (username, password) VALUES (?, ?)',
+                    [username, hashedPassword],
+                    function(err) {
+                        if (err) {
+                            console.error('Error inserting new user:', err);
+                            return res.status(500).json({ error: 'Error creating user' });
+                        }
+                        
+                        console.log('New user registered:', username, 'with ID:', this.lastID);
+                        res.status(201).json({ 
+                            message: 'User created successfully',
+                            userId: this.lastID 
+                        });
+                    }
+                );
+            } catch (hashError) {
+                console.error('Password hashing error:', hashError);
+                res.status(500).json({ error: 'Error processing password' });
+            }
+        });
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Login endpoint
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    db.get(
+        'SELECT * FROM users WHERE username = ?',
+        [username],
+        async (err, user) => {
+            if (err) {
+                console.error('Database error during login:', err);
+                return res.status(500).json({ error: 'Database error' });
+            }
+
+            if (!user) {
+                return res.status(401).json({ error: 'Invalid credentials' });
+            }
+
+            try {
+                const validPassword = await bcrypt.compare(password, user.password);
+                if (!validPassword) {
+                    return res.status(401).json({ error: 'Invalid credentials' });
+                }
+
+                const token = jwt.sign(
+                    { userId: user.id, username: user.username },
+                    JWT_SECRET,
+                    { expiresIn: '24h' }
+                );
+
+                console.log('User logged in successfully:', username);
+                res.json({
+                    message: 'Login successful',
+                    token,
+                    user: {
+                        id: user.id,
+                        username: user.username
+                    }
+                });
+            } catch (error) {
+                console.error('Login error:', error);
+                res.status(500).json({ error: 'Server error' });
+            }
+        }
+    );
+});
+
+// Socket.IO logic
 io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
 
@@ -81,7 +214,6 @@ io.on('connection', (socket) => {
         socket.gameId = gameId;
 
         if (game.players.length === 2) {
- 
             game.players.forEach(player => {
                 player.lives = 3;
             });
@@ -93,9 +225,32 @@ io.on('connection', (socket) => {
                 }))
             });
 
-            game.timeoutId = setTimeout(() => {
-                handleRoundEnd(gameId, game);
-            }, 10000);
+            game.rounds = 0;
+            io.to(gameId).emit('newRound', {
+                roundNumber: 1,
+                message: 'Round 1 Starting!',
+                showTimer: false
+            });
+
+            setTimeout(() => {
+                io.to(gameId).emit('newRound', {
+                    roundNumber: 1,
+                    message: 'Picking Phase - Make Your Choice!',
+                    showTimer: true
+                });
+
+                let timeLeft = 10;
+                game.timeoutId = setInterval(() => {
+                    io.to(gameId).emit('timerUpdate', timeLeft);
+                    timeLeft--;
+                    
+                    if (timeLeft < 0) {
+                        clearInterval(game.timeoutId);
+                        game.timeoutId = null;
+                        handleRoundEnd(gameId, game);
+                    }
+                }, 1000);
+            }, 5000);
         } else {
             socket.emit('waitingForPlayer');
         }
@@ -325,6 +480,11 @@ function handleRoundEnd(gameId, game) {
     }
 }
 
+// Start server
 httpServer.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    console.log('Available endpoints:');
+    console.log('- POST /register');
+    console.log('- POST /login');
+    console.log('- GET /test');
 }); 
