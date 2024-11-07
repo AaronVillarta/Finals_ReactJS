@@ -73,8 +73,8 @@ function GameBoard({ username }) {
           setAnnouncement(roundData.winCondition);
         }
       }
-      setTimeLeft(10);
-      setPlayerChoice(null);
+      setIsPickingPhase(false);
+      setTimeLeft(null);
     });
 
     newSocket.on('playerLeft', () => {
@@ -93,11 +93,16 @@ function GameBoard({ username }) {
       setPlayerHealthChange(null);
       setComputerHealthChange(null);
       setAnnouncement(data.message);
-      setIsPickingPhase(data.showTimer);
+      setIsPickingPhase(data.isPickingPhase);
     });
 
-    newSocket.on('timerUpdate', (time) => {
-      setTimeLeft(time);
+    newSocket.on('timerUpdate', (data) => {
+      if (typeof data === 'object') {
+        setTimeLeft(data.time);
+        setIsPickingPhase(data.isPickingPhase);
+      } else {
+        setTimeLeft(data);
+      }
     });
 
     newSocket.on('gameReset', () => {
@@ -208,7 +213,7 @@ function GameBoard({ username }) {
         </Alert>
       )}
 
-      {gameState === 'playing' && timeLeft !== null && (
+      {gameState === 'playing' && timeLeft !== null && isPickingPhase && (
         <Box sx={{ textAlign: 'center', mb: 2 }}>
           <Typography variant="h6" color={timeLeft <= 3 ? 'error' : 'inherit'}>
             Time remaining: {timeLeft}s

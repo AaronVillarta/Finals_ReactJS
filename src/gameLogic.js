@@ -41,7 +41,31 @@ const SUPER_WEAKNESSES = {
 };
 
 function determineWinner(player1Choice, player2Choice) {
+  // Handle forfeit cases
+  if (player1Choice === 'forfeit' && player2Choice === 'forfeit') {
+    return { 
+      result: 'draw',
+      message: "Both players forfeited - It's a draw!" 
+    };
+  }
+
+  if (player1Choice === 'forfeit') {
+    return {
+      result: 'player2',
+      message: "Player 1 didn't choose in time - Player 2 wins!",
+      superEffective: false
+    };
+  }
+
+  if (player2Choice === 'forfeit') {
+    return {
+      result: 'player1',
+      message: "Player 2 didn't choose in time - Player 1 wins!",
+      superEffective: false
+    };
+  }
   
+  // Normal game logic for when both players made choices
   if (player1Choice === player2Choice) {
     return { 
       result: 'draw',
@@ -49,7 +73,6 @@ function determineWinner(player1Choice, player2Choice) {
     };
   }
 
-  
   if (SUPER_WEAKNESSES[player1Choice] === player2Choice) {
     return {
       result: 'player2',
@@ -58,7 +81,6 @@ function determineWinner(player1Choice, player2Choice) {
     };
   }
 
-  
   if (SUPER_WEAKNESSES[player2Choice] === player1Choice) {
     return {
       result: 'player1',
@@ -67,7 +89,6 @@ function determineWinner(player1Choice, player2Choice) {
     };
   }
 
-  
   if (WINNING_COMBINATIONS[player1Choice].includes(player2Choice)) {
     return {
       result: 'player1',

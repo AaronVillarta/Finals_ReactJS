@@ -7,7 +7,7 @@ const { Server } = require('socket.io');
 const { determineWinner } = require('../src/gameLogic.js');
 const path = require('path');
 const fs = require('fs');
-const sqlite3 = require('sqlite3');
+const sqlite3 = require('sqlite3'); 
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
@@ -15,8 +15,23 @@ const app = express();
 const httpServer = createServer(app);
 
 // CORS configuration
+const ALLOWED_ORIGINS = [
+    'http://localhost:3000',  // React development server
+    'http://localhost:3001',  // Alternative port
+    'http://localhost:5001'   // Direct server access
+];
+
 app.use(cors({
-    origin: ["http://localhost:3000", "http://localhost:3001"],
+    origin: function(origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        if (ALLOWED_ORIGINS.indexOf(origin) === -1) {
+            var msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
     methods: ["GET", "POST"],
     credentials: true
 }));
@@ -26,7 +41,7 @@ app.use(express.json());
 
 const io = new Server(httpServer, {
     cors: {
-        origin: ["http://localhost:3000", "http://localhost:3001"],
+        origin: ALLOWED_ORIGINS,
         methods: ["GET", "POST"],
         credentials: true
     }
@@ -39,6 +54,7 @@ const PORT = process.env.PORT || 5001;
 const games = new Map();
 const users = new Map();
 const playAgainPlayers = new Set();
+const activeUsers = new Set(); // Track currently logged in users
 
 // Update the database path to be relative to the server directory
 const dbPath = path.join(__dirname, 'database', 'game.db');
@@ -150,6 +166,11 @@ app.post('/login', (req, res) => {
         return res.status(400).json({ error: 'Username and password are required' });
     }
 
+    // Check if user is already logged in
+    if (activeUsers.has(username)) {
+        return res.status(400).json({ error: 'User is already logged in' });
+    }
+
     db.get(
         'SELECT * FROM users WHERE username = ?',
         [username],
@@ -169,6 +190,9 @@ app.post('/login', (req, res) => {
                     return res.status(401).json({ error: 'Invalid credentials' });
                 }
 
+                // Add user to active users
+                activeUsers.add(username);
+
                 const token = jwt.sign(
                     { userId: user.id, username: user.username },
                     JWT_SECRET,
@@ -176,6 +200,8 @@ app.post('/login', (req, res) => {
                 );
 
                 console.log('User logged in successfully:', username);
+                console.log('Active users:', Array.from(activeUsers));
+
                 res.json({
                     message: 'Login successful',
                     token,
@@ -190,6 +216,17 @@ app.post('/login', (req, res) => {
             }
         }
     );
+});
+
+// Logout endpoint
+app.post('/logout', (req, res) => {
+    const { username } = req.body;
+    if (username) {
+        activeUsers.delete(username);
+        console.log(`User logged out: ${username}`);
+        console.log('Active users:', Array.from(activeUsers));
+    }
+    res.json({ message: 'Logged out successfully' });
 });
 
 // Socket.IO logic
@@ -214,34 +251,38 @@ io.on('connection', (socket) => {
         socket.gameId = gameId;
 
         if (game.players.length === 2) {
-            game.players.forEach(player => {
-                player.lives = 3;
-            });
+            game.rounds = 1;
             
             io.to(gameId).emit('gameStart', {
                 players: game.players.map(p => ({
                     id: p.id,
                     username: p.username
-                }))
+                })),
+                message: 'Game Starting!',
+                roundNumber: 1
             });
 
-            game.rounds = 0;
             io.to(gameId).emit('newRound', {
                 roundNumber: 1,
-                message: 'Round 1 Starting!',
-                showTimer: false
+                message: `Round 1 Starting!`,
+                showTimer: false,
+                isPickingPhase: false
             });
 
             setTimeout(() => {
                 io.to(gameId).emit('newRound', {
                     roundNumber: 1,
-                    message: 'Picking Phase - Make Your Choice!',
-                    showTimer: true
+                    message: `Picking Phase - Make Your Choice!`,
+                    showTimer: true,
+                    isPickingPhase: true
                 });
 
                 let timeLeft = 10;
                 game.timeoutId = setInterval(() => {
-                    io.to(gameId).emit('timerUpdate', timeLeft);
+                    io.to(gameId).emit('timerUpdate', {
+                        time: timeLeft,
+                        isPickingPhase: true
+                    });
                     timeLeft--;
                     
                     if (timeLeft < 0) {
@@ -250,7 +291,8 @@ io.on('connection', (socket) => {
                         handleRoundEnd(gameId, game);
                     }
                 }, 1000);
-            }, 5000);
+            }, 5000); // 5-second pause for round announcement
+
         } else {
             socket.emit('waitingForPlayer');
         }
@@ -284,6 +326,13 @@ io.on('connection', (socket) => {
         if (socket.gameId) {
             const game = games.get(socket.gameId);
             if (game) {
+                const disconnectedPlayer = game.players.find(p => p.id === socket.id);
+                if (disconnectedPlayer) {
+                    // Remove user from active users when they disconnect
+                    activeUsers.delete(disconnectedPlayer.username);
+                    console.log(`User removed from active users: ${disconnectedPlayer.username}`);
+                    console.log('Active users:', Array.from(activeUsers));
+                }
 
                 if (game.timeoutId) {
                     clearInterval(game.timeoutId);
@@ -302,7 +351,6 @@ io.on('connection', (socket) => {
     socket.on('resetGame', (username) => {
         console.log(`${username} requesting game reset`);
         
-        // Clear any existing timeouts/intervals
         if (socket.gameId) {
             const game = games.get(socket.gameId);
             if (game) {   
@@ -310,8 +358,8 @@ io.on('connection', (socket) => {
                 const bothPlayersWantRematch = game.players.every(p => 
                     playAgainPlayers.has(p.id)
                 );
+                
                 if (bothPlayersWantRematch) {
-                   
                     if (game.timeoutId) {
                         clearInterval(game.timeoutId);
                         game.timeoutId = null;
@@ -321,19 +369,52 @@ io.on('connection', (socket) => {
                         player.lives = 3;
                         player.choice = null;
                     });
-                    game.rounds = 0;
+                    game.rounds = 1;
 
                     playAgainPlayers.clear();
 
+                    // Start new game with Round 1 announcement
                     io.to(socket.gameId).emit('gameStart', {
                         players: game.players.map(p => ({
                             id: p.id,
                             username: p.username
-                        }))
+                        })),
+                        message: 'Game Starting!',
+                        roundNumber: 1
                     });
-                    game.timeoutId = setTimeout(() => {
-                        handleRoundEnd(socket.gameId, game);
-                    }, 10000);
+
+                    // Show Round 1 Starting!
+                    io.to(socket.gameId).emit('newRound', {
+                        roundNumber: 1,
+                        message: `Round 1 Starting!`,
+                        showTimer: false,
+                        isPickingPhase: false
+                    });
+
+                    // Start picking phase after 5 seconds
+                    setTimeout(() => {
+                        io.to(socket.gameId).emit('newRound', {
+                            roundNumber: 1,
+                            message: `Picking Phase - Make Your Choice!`,
+                            showTimer: true,
+                            isPickingPhase: true
+                        });
+
+                        let timeLeft = 10;
+                        game.timeoutId = setInterval(() => {
+                            io.to(socket.gameId).emit('timerUpdate', {
+                                time: timeLeft,
+                                isPickingPhase: true
+                            });
+                            timeLeft--;
+                            
+                            if (timeLeft < 0) {
+                                clearInterval(game.timeoutId);
+                                game.timeoutId = null;
+                                handleRoundEnd(socket.gameId, game);
+                            }
+                        }, 1000);
+                    }, 5000);
                 } else {
                     socket.emit('waitingForRematch');
                 }
@@ -363,7 +444,9 @@ function createNewGame() {
 
 function updateLives(game, result) {
     const [player1, player2] = game.players;
+    const MAX_LIVES = 10;  // Set maximum lives to 10
 
+    // Initialize lives if undefined
     if (player1.lives === undefined) player1.lives = 3;
     if (player2.lives === undefined) player2.lives = 3;
     
@@ -380,7 +463,8 @@ function updateLives(game, result) {
             player1Change = -1;
             player2Change = +1;
             player1.lives = Math.max(0, player1.lives - 1);
-            player2.lives += 1;
+            // Update maximum life limit to 10
+            player2.lives = Math.min(MAX_LIVES, player2.lives + 1);
             winCondition = `${player2.username} won and gained 1 life!`;
         }
     } else if (result.result === 'player1') {
@@ -392,10 +476,15 @@ function updateLives(game, result) {
             player2Change = -1;
             player1Change = +1;
             player2.lives = Math.max(0, player2.lives - 1);
-            player1.lives += 1;
+            // Update maximum life limit to 10
+            player1.lives = Math.min(MAX_LIVES, player1.lives + 1);
             winCondition = `${player1.username} won and gained 1 life!`;
         }
     }
+
+    // Ensure lives stay within bounds (0-10)
+    player1.lives = Math.max(0, Math.min(MAX_LIVES, player1.lives));
+    player2.lives = Math.max(0, Math.min(MAX_LIVES, player2.lives));
 
     player1.lastChange = player1Change;
     player2.lastChange = player2Change;
@@ -429,43 +518,42 @@ function handleRoundEnd(gameId, game) {
             [player1.id]: player1.lives,
             [player2.id]: player2.lives
         },
-        winCondition: winCondition
+        winCondition: winCondition,
+        isPickingPhase: false
     });
 
     if (player1.lives > 0 && player2.lives > 0) {
-        // Wait 10 seconds to show results
         setTimeout(() => {
-            // Reset choices for next round
             player1.choice = null;
             player2.choice = null;
             game.rounds++;
             
-            // Clear any existing interval first
             if (game.timeoutId) {
                 clearInterval(game.timeoutId);
                 game.timeoutId = null;
             }
             
-            // Emit new round event with round number
             io.to(gameId).emit('newRound', {
                 roundNumber: game.rounds,
                 message: `Round ${game.rounds} Starting!`,
-                showTimer: false  // Don't show timer during padding
+                showTimer: false,
+                isPickingPhase: false
             });
             
-            // Wait 5 seconds before starting the picking phase
             setTimeout(() => {
-                // Announce picking phase
                 io.to(gameId).emit('newRound', {
                     roundNumber: game.rounds,
                     message: `Picking Phase - Make Your Choice!`,
-                    showTimer: true  // Show timer during picking phase
+                    showTimer: true,
+                    isPickingPhase: true
                 });
 
-                // Start server-side timer and send updates to clients
                 let timeLeft = 10;
                 game.timeoutId = setInterval(() => {
-                    io.to(gameId).emit('timerUpdate', timeLeft);
+                    io.to(gameId).emit('timerUpdate', {
+                        time: timeLeft,
+                        isPickingPhase: true
+                    });
                     timeLeft--;
                     
                     if (timeLeft < 0) {
@@ -474,9 +562,8 @@ function handleRoundEnd(gameId, game) {
                         handleRoundEnd(gameId, game);
                     }
                 }, 1000);
-            }, 5000); // 5-second padding before picking phase
-            
-        }, 10000); // Show results for 10 seconds
+            }, 5000);
+        }, 5000);
     }
 }
 

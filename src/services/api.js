@@ -46,4 +46,18 @@ export const registerUser = async (userData) => {
     }
     throw error;
   }
+};
+
+export const logoutUser = async (username) => {
+    try {
+        await fetch(`${API_URL}/logout`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ username }),
+        });
+    } catch (error) {
+        console.error('Logout error:', error);
+    }
 }; 
