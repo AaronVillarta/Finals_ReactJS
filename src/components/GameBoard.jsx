@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Button, Typography, Grid, Paper, Box, CircularProgress, Alert } from '@mui/material';
+import { Button, Typography, Grid, Paper, Box, CircularProgress, Alert, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 import { io } from 'socket.io-client';
 import { ELEMENTS } from '../gameLogic';
+import { useNavigate } from 'react-router-dom';
+import GameRules from './GameRules';
 
 function GameBoard({ username }) {
   const [socket, setSocket] = useState(null);
@@ -19,10 +21,15 @@ function GameBoard({ username }) {
   const [announcement, setAnnouncement] = useState('');
   const [timeLeft, setTimeLeft] = useState(10);
   const [isPickingPhase, setIsPickingPhase] = useState(false);
+  const [opponentLeft, setOpponentLeft] = useState(null);
+  const [showRules, setShowRules] = useState(false);
+  const [disconnectionDialog, setDisconnectionDialog] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const newSocket = io('http://localhost:5001');
-    
+    setSocket(newSocket);
+
     newSocket.on('connect', () => {
       console.log('Connected to server');
       newSocket.emit('joinGame', username);
@@ -77,12 +84,9 @@ function GameBoard({ username }) {
       setTimeLeft(null);
     });
 
-    newSocket.on('playerLeft', () => {
-      setGameState('waiting');
-      setPlayers([]);
-      setPlayerChoice(null);
-      setComputerChoice(null);
-      setResult('Opponent left the game');
+    newSocket.on('opponentLeft', (opponentName) => {
+      setOpponentLeft(opponentName);
+      navigate('/hub');
     });
 
     newSocket.on('newRound', (data) => {
@@ -126,12 +130,35 @@ function GameBoard({ username }) {
       setAnnouncement('Waiting for opponent to choose rematch...');
     });
 
-    setSocket(newSocket);
+    newSocket.on('leaveGame', () => {
+      navigate('/hub');
+    });
+
+    newSocket.on('opponentDisconnected', (data) => {
+      setDisconnectionDialog({
+        username: data.username,
+        message: data.message
+      });
+      // Reset game state
+      setGameState('waiting');
+      setPlayers([]);
+      setPlayerChoice(null);
+      setComputerChoice(null);
+      setResult('');
+      setPlayerLives(3);
+      setComputerLives(3);
+      setShowConfirmation(false);
+      setPendingChoice(null);
+      setPlayerHealthChange(null);
+      setComputerHealthChange(null);
+      setAnnouncement('');
+      setTimeLeft(10);
+    });
 
     return () => {
       if (newSocket) newSocket.disconnect();
     };
-  }, [username]);
+  }, [username, navigate]);
 
   const handleElementChoice = (element) => {
     setPendingChoice(element);
@@ -150,6 +177,21 @@ function GameBoard({ username }) {
     setPendingChoice(null);
   };
 
+  const handleBackToHub = () => {
+    if (socket) {
+      setTimeout(() => {
+        socket.emit('requestWinsUpdate');
+        socket.emit('leaveGame');
+        navigate('/hub');
+      }, 500);
+    }
+  };
+
+  const handleDisconnectionDialogClose = () => {
+    setDisconnectionDialog(null);
+    navigate('/hub');
+  };
+
   if (gameState === 'waiting') {
     return (
       <Paper elevation={3} sx={{ p: 3, mt: 3 }}>
@@ -165,6 +207,16 @@ function GameBoard({ username }) {
 
   return (
     <Paper elevation={3} sx={{ p: 3, mt: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+        <Button 
+          variant="outlined" 
+          onClick={() => setShowRules(true)}
+          sx={{ mr: 2 }}
+        >
+          Show Rules
+        </Button>
+      </Box>
+
       {announcement && (
         <Alert 
           severity={
@@ -305,8 +357,59 @@ function GameBoard({ username }) {
           >
             Play Again
           </Button>
+          <Button 
+            variant="outlined" 
+            onClick={handleBackToHub}
+            sx={{ mt: 2, ml: 2 }}
+          >
+            Back to Hub
+          </Button>
         </Box>
       )}
+
+      {/* Opponent Left Dialog */}
+      {opponentLeft && (
+        <Dialog open={Boolean(opponentLeft)} onClose={() => setOpponentLeft(null)}>
+          <DialogTitle>Opponent Left</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              {opponentLeft} left the session.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpponentLeft(null)} color="primary">
+              OK
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {showRules && (
+        <GameRules onClose={() => setShowRules(false)} />
+      )}
+
+      {/* Add Disconnection Dialog */}
+      <Dialog
+        open={Boolean(disconnectionDialog)}
+        onClose={handleDisconnectionDialogClose}
+      >
+        <DialogTitle>Opponent Disconnected</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {disconnectionDialog?.username} has disconnected from the game. 
+            {disconnectionDialog?.message}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={handleDisconnectionDialogClose} 
+            color="primary" 
+            variant="contained"
+          >
+            Return to Hub
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 }

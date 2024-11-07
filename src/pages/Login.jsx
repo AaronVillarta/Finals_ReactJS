@@ -2,6 +2,7 @@ import { Box, Button, Container, TextField, Typography, Alert } from '@mui/mater
 import React, { useState } from 'react';
 import { useTheme } from '@mui/material/styles';
 import Signup from './Signup';
+import { useNavigate } from 'react-router-dom';
 
 const API_URL = 'http://localhost:5001';
 
@@ -14,6 +15,7 @@ const Login = ({ onLogin }) => {
   });
   const [errors, setErrors] = useState({});
   const [submitError, setSubmitError] = useState('');
+  const navigate = useNavigate();
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -69,7 +71,10 @@ const Login = ({ onLogin }) => {
         }
 
         console.log('Login successful:', data);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('token', data.token);
         onLogin(data.user);
+        navigate('/hub');
       } catch (error) {
         console.error('Login error:', error);
         setSubmitError(error.message || 'Failed to connect to server');

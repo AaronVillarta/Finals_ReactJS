@@ -56,6 +56,7 @@ Verify Database:
 Test Database:
 1. Visit http://localhost:5001/test (should see "Server is running!")
 2. Visit http://localhost:5001/test/users (should see list of users)
+3. Visit http://localhost:5001/test/wins (should see list of wins)
 
 View Database Contents:
 Option 1 - SQLite Browser:

@@ -1,22 +1,83 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
-import Game from './components/Game';
+import PlayerHub from './pages/PlayerHub';
+import GameBoard from './components/GameBoard';
 
 function App() {
-  const [username, setUsername] = useState('');
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleLogin = (userData) => {
-    setUsername(userData.username);
-  };
+  useEffect(() => {
+    const verifyAuth = async () => {
+      const token = localStorage.getItem('token');
+      const savedUser = localStorage.getItem('user');
+
+      if (!token || !savedUser) {
+        setUser(null);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch('http://localhost:5001/verify-token', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setUser(JSON.parse(savedUser));
+        } else {
+          localStorage.clear();
+          setUser(null);
+        }
+      } catch (error) {
+        console.error('Auth verification failed:', error);
+      }
+      setIsLoading(false);
+    };
+
+    verifyAuth();
+  }, []);
+
+  if (isLoading) {
+    return null; // or a loading spinner
+  }
 
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
-        <Route path="/" element={<Login onLogin={handleLogin} />} />
-        <Route path="/game" element={<Game username={username} />} />
+        <Route 
+          path="/" 
+          element={user ? <Navigate to="/hub" /> : <Login onLogin={setUser} />} 
+        />
+        <Route 
+          path="/hub" 
+          element={
+            user ? (
+              <PlayerHub 
+                username={user.username} 
+                onLogout={() => {
+                  localStorage.clear();
+                  setUser(null);
+                }}
+              />
+            ) : (
+              <Navigate to="/" />
+            )
+          } 
+        />
+        <Route 
+          path="/game" 
+          element={user ? <GameBoard username={user.username} /> : <Navigate to="/" />} 
+        />
       </Routes>
-    </BrowserRouter>
+    </Router>
   );
 }
 
