@@ -30,13 +30,13 @@ const SUPER_WEAKNESSES = {
   Water: 'Sponge',
   Air: 'Tree',
   Dragon: 'Lightning',
-  Devil: 'Human',
-  Lightning: 'Gun',
+  Devil: 'Gun',
+  Lightning: 'Dragon',
   Gun: 'Snake',
   Snake: 'Wolf',
   Human: 'Devil',
   Tree: 'Fire',
-  Wolf: 'Dragon',
+  Wolf: 'Human',
   Sponge: 'Air'
 };
 
