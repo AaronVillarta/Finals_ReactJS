@@ -41,7 +41,7 @@ const SUPER_WEAKNESSES = {
 };
 
 function determineWinner(player1Choice, player2Choice) {
-  // Handle forfeit cases
+ 
   if (player1Choice === 'forfeit' && player2Choice === 'forfeit') {
     return { 
       result: 'draw',
@@ -64,8 +64,7 @@ function determineWinner(player1Choice, player2Choice) {
       superEffective: false
     };
   }
-  
-  // Normal game logic for when both players made choices
+
   if (player1Choice === player2Choice) {
     return { 
       result: 'draw',

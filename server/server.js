@@ -14,16 +14,16 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const httpServer = createServer(app);
 
-// CORS configuration
+
 const ALLOWED_ORIGINS = [
-    'http://localhost:3000',  // React development server
-    'http://localhost:3001',  // Alternative port
-    'http://localhost:5001'   // Direct server access
+    'http://localhost:3000',  
+    'http://localhost:3001',  
+    'http://localhost:5001'
 ];
 
 app.use(cors({
     origin: function(origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
+  
         if (!origin) return callback(null, true);
         
         if (ALLOWED_ORIGINS.indexOf(origin) === -1) {
@@ -36,7 +36,7 @@ app.use(cors({
     credentials: true
 }));
 
-// Important: This needs to be before any routes
+
 app.use(express.json());
 
 const io = new Server(httpServer, {
@@ -50,21 +50,18 @@ const io = new Server(httpServer, {
 const JWT_SECRET = process.env.JWT_SECRET;
 const PORT = process.env.PORT || 5001;
 
-// In-memory storage
-const games = new Map();
-const users = new Map();
-const playAgainPlayers = new Set();
-const activeUsers = new Set(); // Track currently logged in users
 
-// Update the database path to be relative to the server directory
+const games = new Map();
+const playAgainPlayers = new Set();
+const activeUsers = new Set(); 
+
 const dbPath = path.join(__dirname, 'database', 'game.db');
 
-// Create database directory if it doesn't exist
 if (!fs.existsSync(path.join(__dirname, 'database'))) {
     fs.mkdirSync(path.join(__dirname, 'database'));
 }
 
-// Update database connection
+
 const db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
         console.error('Error opening database:', err);
@@ -75,7 +72,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
     }
 });
 
-// Update createTables function to log when tables are created
+
 function createTables() {
     db.run(`
         CREATE TABLE IF NOT EXISTS users (
@@ -93,7 +90,7 @@ function createTables() {
     });
 }
 
-// API Routes
+
 app.get('/test', (req, res) => {
     res.json({ message: 'Server is running!' });
 });
@@ -108,7 +105,7 @@ app.get('/test/users', (req, res) => {
     });
 });
 
-// Registration endpoint
+
 app.post('/register', async (req, res) => {
     const { username, password } = req.body;
 
@@ -117,7 +114,7 @@ app.post('/register', async (req, res) => {
             return res.status(400).json({ error: 'Username and password are required' });
         }
 
-        // Check for existing user
+        
         db.get('SELECT id FROM users WHERE username = ?', [username], async (err, row) => {
             if (err) {
                 console.error('Database error during registration:', err);
@@ -158,7 +155,7 @@ app.post('/register', async (req, res) => {
     }
 });
 
-// Login endpoint
+
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
 
@@ -166,7 +163,7 @@ app.post('/login', (req, res) => {
         return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    // Check if user is already logged in
+    
     if (activeUsers.has(username)) {
         return res.status(400).json({ error: 'User is already logged in' });
     }
@@ -190,7 +187,7 @@ app.post('/login', (req, res) => {
                     return res.status(401).json({ error: 'Invalid credentials' });
                 }
 
-                // Add user to active users
+                
                 activeUsers.add(username);
 
                 const token = jwt.sign(
@@ -218,7 +215,7 @@ app.post('/login', (req, res) => {
     );
 });
 
-// Logout endpoint
+
 app.post('/logout', (req, res) => {
     const { username } = req.body;
     if (username) {
@@ -229,7 +226,7 @@ app.post('/logout', (req, res) => {
     res.json({ message: 'Logged out successfully' });
 });
 
-// Socket.IO logic
+
 io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
 
@@ -291,7 +288,7 @@ io.on('connection', (socket) => {
                         handleRoundEnd(gameId, game);
                     }
                 }, 1000);
-            }, 5000); // 5-second pause for round announcement
+            }, 5000); 
 
         } else {
             socket.emit('waitingForPlayer');
@@ -328,7 +325,7 @@ io.on('connection', (socket) => {
             if (game) {
                 const disconnectedPlayer = game.players.find(p => p.id === socket.id);
                 if (disconnectedPlayer) {
-                    // Remove user from active users when they disconnect
+                    
                     activeUsers.delete(disconnectedPlayer.username);
                     console.log(`User removed from active users: ${disconnectedPlayer.username}`);
                     console.log('Active users:', Array.from(activeUsers));
@@ -373,7 +370,7 @@ io.on('connection', (socket) => {
 
                     playAgainPlayers.clear();
 
-                    // Start new game with Round 1 announcement
+                    
                     io.to(socket.gameId).emit('gameStart', {
                         players: game.players.map(p => ({
                             id: p.id,
@@ -383,7 +380,7 @@ io.on('connection', (socket) => {
                         roundNumber: 1
                     });
 
-                    // Show Round 1 Starting!
+                    
                     io.to(socket.gameId).emit('newRound', {
                         roundNumber: 1,
                         message: `Round 1 Starting!`,
@@ -391,7 +388,7 @@ io.on('connection', (socket) => {
                         isPickingPhase: false
                     });
 
-                    // Start picking phase after 5 seconds
+                    
                     setTimeout(() => {
                         io.to(socket.gameId).emit('newRound', {
                             roundNumber: 1,
@@ -444,9 +441,9 @@ function createNewGame() {
 
 function updateLives(game, result) {
     const [player1, player2] = game.players;
-    const MAX_LIVES = 10;  // Set maximum lives to 10
+    const MAX_LIVES = 10;  
 
-    // Initialize lives if undefined
+    
     if (player1.lives === undefined) player1.lives = 3;
     if (player2.lives === undefined) player2.lives = 3;
     
@@ -463,7 +460,7 @@ function updateLives(game, result) {
             player1Change = -1;
             player2Change = +1;
             player1.lives = Math.max(0, player1.lives - 1);
-            // Update maximum life limit to 10
+            
             player2.lives = Math.min(MAX_LIVES, player2.lives + 1);
             winCondition = `${player2.username} won and gained 1 life!`;
         }
@@ -476,13 +473,13 @@ function updateLives(game, result) {
             player2Change = -1;
             player1Change = +1;
             player2.lives = Math.max(0, player2.lives - 1);
-            // Update maximum life limit to 10
+            
             player1.lives = Math.min(MAX_LIVES, player1.lives + 1);
             winCondition = `${player1.username} won and gained 1 life!`;
         }
     }
 
-    // Ensure lives stay within bounds (0-10)
+    
     player1.lives = Math.max(0, Math.min(MAX_LIVES, player1.lives));
     player2.lives = Math.max(0, Math.min(MAX_LIVES, player2.lives));
 
@@ -567,7 +564,7 @@ function handleRoundEnd(gameId, game) {
     }
 }
 
-// Start server
+
 httpServer.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log('Available endpoints:');
