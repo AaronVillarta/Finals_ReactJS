@@ -53,7 +53,7 @@ function PlayerHub({ username, onLogout }) {
 
     newSocket.on('challengeError', (error) => {
       console.error('Challenge error:', error);
-      // Optionally show an error message to the user
+      
     });
 
     newSocket.on('gameStart', () => {
@@ -129,7 +129,7 @@ function PlayerHub({ username, onLogout }) {
           ))}
         </List>
 
-        {/* Challenge Confirmation Dialog */}
+        { }
         <Dialog open={challengeDialogOpen} onClose={declineChallenge}>
           <DialogTitle>Challenge Player</DialogTitle>
           <DialogContent>

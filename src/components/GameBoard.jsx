@@ -388,7 +388,7 @@ function GameBoard({ username }) {
         <GameRules onClose={() => setShowRules(false)} />
       )}
 
-      {/* Add Disconnection Dialog */}
+      { }
       <Dialog
         open={Boolean(disconnectionDialog)}
         onClose={handleDisconnectionDialogClose}

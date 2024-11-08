@@ -173,7 +173,6 @@ app.post('/login', (req, res) => {
         return res.status(400).json({ error: 'Username and password are required' });
     }
 
-    // Check if user is already logged in
     if (activeUsers.has(username)) {
         return res.status(400).json({ error: 'User already logged in' });
     }
@@ -249,8 +248,7 @@ io.on('connection', (socket) => {
         activeUsers.add(username);
         
         io.emit('updateOnlineUsers', Array.from(activeUsers));
-        
-        // Fetch and send wins data
+
         db.all(`SELECT username, wins FROM users`, [], (err, rows) => {
             if (err) {
                 console.error('Error fetching wins:', err);
@@ -444,7 +442,7 @@ io.on('connection', (socket) => {
             opponentSocket.emit('receiveChallenge', challenger);
         } else {
             console.log(`Opponent socket not found for ${opponent}`);
-            // Notify challenger that opponent is not available
+
             socket.emit('challengeError', 'Opponent is not available');
         }
     });
@@ -533,7 +531,7 @@ io.on('connection', (socket) => {
 
     socket.on('joinGame', (username) => {
         socket.username = username;
-        // Store the game ID if player is in a game
+
         const game = Array.from(games.values()).find(g => 
             g.players.some(p => p.username === username)
         );
@@ -546,10 +544,10 @@ io.on('connection', (socket) => {
         if (socket.gameId) {
             const game = games.get(socket.gameId);
             if (game) {
-                // Find the opponent
+              
                 const opponent = game.players.find(p => p.username !== socket.username);
                 if (opponent) {
-                    // Notify opponent about disconnection
+          
                     const opponentSocket = Array.from(io.sockets.sockets.values())
                         .find(s => s.username === opponent.username);
                     
@@ -564,7 +562,7 @@ io.on('connection', (socket) => {
                 games.delete(socket.gameId);
             }
         }
-        // ... existing disconnect logic ...
+
     });
 });
 

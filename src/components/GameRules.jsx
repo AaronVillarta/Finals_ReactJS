@@ -7,7 +7,7 @@ import 'react-resizable/css/styles.css';
 import './GameRules.css';
 
 function GameRules({ onClose }) {
-  // Get saved size from localStorage or use default
+  
   const [size, setSize] = useState(() => {
     const savedSize = localStorage.getItem('gameRulesSize');
     return savedSize ? JSON.parse(savedSize) : { width: 400, height: 600 };
@@ -15,7 +15,7 @@ function GameRules({ onClose }) {
 
   const [scale, setScale] = useState(1);
 
-  // Save size to localStorage whenever it changes
+  
   useEffect(() => {
     localStorage.setItem('gameRulesSize', JSON.stringify(size));
   }, [size]);
@@ -27,7 +27,7 @@ function GameRules({ onClose }) {
     setScale(Math.max(0.5, Math.min(1.5, newScale)));
   }, [size.width, size.height]);
 
-  // Handle window resize
+  
   const handleResize = (e, { size: newSize }) => {
     setSize(newSize);
   };
@@ -117,13 +117,13 @@ function GameRules({ onClose }) {
                 textAlign: 'left',
                 flex: 1,
                 overflowY: 'auto',
-                // Hide scrollbar for Firefox
+                
                 scrollbarWidth: 'none',
-                // Hide scrollbar for Chrome/Safari/Opera
+                
                 '&::-webkit-scrollbar': {
                   display: 'none'
                 },
-                // Hide scrollbar for IE/Edge
+                
                 msOverflowStyle: 'none',
                 '& ul': {
                   margin: 1 * scale,
@@ -162,13 +162,13 @@ function GameRules({ onClose }) {
                   overflowX: 'auto',
                   maxHeight: '100%',
                   position: 'relative',
-                  // Hide scrollbar for Firefox
+                  
                   scrollbarWidth: 'none',
-                  // Hide scrollbar for Chrome/Safari/Opera
+                  
                   '&::-webkit-scrollbar': {
                     display: 'none'
                   },
-                  // Hide scrollbar for IE/Edge
+                  
                   msOverflowStyle: 'none',
                   '& table': {
                     borderCollapse: 'separate',
